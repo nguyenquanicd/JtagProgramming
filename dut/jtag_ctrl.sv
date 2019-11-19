@@ -205,7 +205,9 @@ module jtag_ctrl (
   end
   //Address register
   always_ff @ (posedge tck) begin
-    if (inst_setAddr & update_dr)
+    if (!jtag_rst_n)
+      addr_reg[7:0] <= 8'd0;
+    else if (inst_setAddr & update_dr)
       addr_reg[7:0] <= shift_dr_reg[17:10];
   end
   //Write data register

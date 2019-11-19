@@ -21,6 +21,7 @@ module tb_simple_jtag;
   localparam [1:0] OKAY = 2'b10;
   localparam [1:0] READ = 2'b01;
   localparam [1:0] WRITE= 2'b10;
+  localparam [1:0] CHECK= 2'b00;
   localparam  EXIT2_DR = 4'h0;
   localparam  EXIT1_DR = 4'h1;
   localparam  SHIFT_DR = 4'h2;
@@ -75,12 +76,12 @@ module tb_simple_jtag;
   end
   //Capture Address
   always @ (posedge TCK) begin
-    if (`tapState == SHIFT_DR)
+    if (`tapState == SHIFT_DR && `tapIr == SET_ADDR)
       capAddr <= {TDO, capAddr[7:1]};
   end
   //Capture Data
   always @ (posedge TCK) begin
-    if (`tapState == SHIFT_DR)
+    if (`tapState == SHIFT_DR && (`tapIr == SET_DATA || `tapIr == BYPASS))
       capData <= {TDO, capData[17:1]};
   end
   //clock is running free
@@ -106,8 +107,8 @@ module tb_simple_jtag;
     ir = BYPASS;
     send_IR;
     //
-    dr = 18'b01111111_11111110_10;
-    BIT_NUM = 10;
+    dr = 18'b01111111_11111010_10;
+    BIT_NUM = 5;
     send_DR;
     //Test SET_ADDR
     ir = SET_ADDR;
@@ -132,14 +133,7 @@ module tb_simple_jtag;
     send_DR;
     //Test SET_DATA (CHECK)
     checkStatus;
-    //Test SET_ADDR
-    ir = SET_ADDR;
-    send_IR;
-    //
-    dr = 18'b01111111_11011111_11;
-    BIT_NUM = 8;
-    send_DR;
-    #234ns
+    #234
     $stop;
   end : main
   //
@@ -155,17 +149,20 @@ module tb_simple_jtag;
   endtask : checkStatus
   //
   task goto_IDLE;
-    taskName = "goto_IDLE";
-    @ (negedge TCK);
-    TMS <= 1'b0;
-    @ (negedge TCK);
-    printState;
+    begin
+      @ (negedge TCK);
+      taskName <= "goto_IDLE";
+      TMS <= 1'b0;
+      @ (negedge TCK);
+      printState;
+      $strobe ("----------------------------------------\n");
+    end
   endtask : goto_IDLE
   //
   task send_IR;
     begin
-      taskName = "send_IR";
       @ (negedge TCK);
+      taskName <= "send_IR";
       TMS <= 1'b1;
       repeat (2) @ (negedge TCK); //SELECT_IR_SCAN
       printState;
@@ -182,13 +179,14 @@ module tb_simple_jtag;
       printRegTdo;
       printReg;
       repeat (1) @ (negedge TCK);
+      $strobe ("[END IR] ----------------------------------------\n");
     end
   endtask : send_IR
   //
   task send_DR;
     begin
-      taskName = "send_DR";
       @ (negedge TCK);
+      taskName <= "send_DR";
       TMS <= 1'b1;
       repeat (1) @ (negedge TCK); //SELECT_DR_SCAN
       printState;
@@ -205,6 +203,7 @@ module tb_simple_jtag;
       printRegTdo;
       printReg;
       repeat (1) @ (negedge TCK);
+      $strobe ("[END DR] ----------------------------------------\n");
     end
   endtask : send_DR
   //
@@ -223,31 +222,52 @@ module tb_simple_jtag;
   endtask : printReg
   task printRegTdo;
     begin
-      $strobe ("[%s] testIR   : %4b", taskName, capIr);
-      $strobe ("[%s] testAddr : %8b", taskName, capAddr);
-      $strobe ("[%s] testData : %18b", taskName, capData);
+      $strobe ("[%s] capIr from TDO   : %4b", taskName, capIr);
+      $strobe ("[%s] capAddr from TDO : %8b", taskName, capAddr);
+      $strobe ("[%s] capData from TDO : %18b", taskName, capData);
     end
   endtask : printRegTdo
   //
   task shiftIr;
-    taskName = "shiftIr";
-    for (int i = 0; i < 3; i++) begin
-      $strobe ("[%s] ir = %4b", taskName, ir);
-      TDI = ir[0];
-      @ (negedge TCK);
-      ir  = ir >> 1;
-      TDI = ir[0];
+    begin
+      taskName <= "IR";
+      case (ir)
+        BYPASS: $strobe ("Load instruction: BYPASS");
+        SET_ADDR: $strobe ("Load instruction: SET_ADDR");
+        SET_DATA: $strobe ("Load instruction: SET_DATA");
+        default: $strobe ("Load instruction: UN-Supported");
+      endcase
+      for (int i = 0; i < 3; i++) begin
+        TDI = ir[0];
+        @ (negedge TCK);
+        ir  = ir >> 1;
+        TDI = ir[0];
+      end
     end
   endtask : shiftIr
   //
   task shiftDr;
-    taskName = "shiftDr";
-    for (int j = 0; j < BIT_NUM-1; j++) begin
-      $strobe ("[%s] dr = %18b", taskName, dr);
-      TDI = dr[0];
-      @ (negedge TCK);
-      dr  = dr >> 1;
-      TDI = dr[0];
+    begin
+      taskName <= "DR";
+      if (`tapIr == BYPASS)
+        $strobe ("Shift DATA in BYPASS");
+      else if (`tapIr == SET_ADDR)
+        $strobe ("Shift Address in SET_ADDR");
+      else begin
+        case (dr[1:0])
+          CHECK: $strobe ("Load request CHECK in SET_DATA");
+          READ: $strobe ("Load request READ in SET_DATA");
+          WRITE: $strobe ("Load request WRITE in SET_DATA");
+          default: $strobe ("Load request: UN-Supported");
+        endcase
+      end
+      for (int j = 0; j < BIT_NUM-1; j++) begin
+        //$strobe ("[%s] dr = %18b", taskName, dr);
+        TDI = dr[0];
+        @ (negedge TCK);
+        dr  = dr >> 1;
+        TDI = dr[0];
+      end
     end
   endtask : shiftDr
   //

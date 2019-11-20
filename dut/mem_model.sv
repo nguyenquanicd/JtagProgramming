@@ -12,8 +12,8 @@ module mem_model (
   input [7:0] mem_addr,
   input [15:0] mem_wdata
   );
-  localparam TWRITE  = 16'h15;
-  localparam TTRANS  = 16'h9;
+  localparam TWRITE  = 16'd43;
+  localparam TTRANS  = 16'd35;
   logic [15:0] memArray[255:0];
   logic inClk;
   logic [15:0] inCounter;
@@ -32,7 +32,7 @@ module mem_model (
       inCounter[15:0] <= 16'd0;
   end : timingCounter
   assign inWe = (inCounter >= TWRITE);
-  assign inRe = (inCounter > TTRANS);
+  assign inRe = (inCounter >= TTRANS);
   //Write to memory
   always @ (posedge inClk) begin : memoryArray
     if (inWe & mem_we)

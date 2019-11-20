@@ -190,8 +190,12 @@ module jtag_ctrl (
         else
           dr_reg_in[17:0] = {wdata[15:0], OKAY};
       end
-      else
-        dr_reg_in[17:0] = {16'h0000, BUSY};
+      else begin
+        if (read_process)
+          dr_reg_in[17:0] = {rdata_reg[15:0], BUSY};
+        else
+          dr_reg_in[17:0] = {wdata[15:0], BUSY};
+      end
     end
     else
       dr_reg_in[17:0] = 18'd0;

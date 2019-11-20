@@ -26,7 +26,7 @@ module mem_ctrl (
     MEM_IDLE = 1'b0,
     MEM_ACCESS = 1'b1
   } mem_state, mem_next_state;
-  localparam [15:0] ACC_DELAY = 16'h000f;
+  localparam [15:0] ACC_DELAY = 16'd15;
   logic [2:0] sel_sync;
   logic rising_sel;
   logic idle_state;
